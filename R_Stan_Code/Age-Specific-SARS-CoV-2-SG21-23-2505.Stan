@@ -61,9 +61,13 @@ transformed parameters {
   // and a container to store the precomputed infections by age
   matrix<lower=0>[(N2+Seed),A] E_infeByAge;
   matrix<lower=0>[A, (N2+Seed)] suscep;
+  vector[A] zero_vector_A = rep_vector(0.,A);
+  array[N2+Seed] matrix<lower=0>[A, A] TimeVaryInfeByAge;
   // initial values of E_infeByAge
   E_infeByAge[1:N0,:] = e_cases_N0;
-  vector[A] zero_vector_A = rep_vector(0.,A);
+  for (t in 1:N0){
+    TimeVaryInfeByAge[t] = rep_matrix(e_cases_N0[t,:]/A, A);
+  }
 
   // Time-varying contact matrix
   array[W] matrix<lower=0>[A, A] ConMatTran;
@@ -112,30 +116,45 @@ transformed parameters {
   for (t in (N0+1):(TVaccine+Seed)){
     tmp_row_vector_A = rev_serial_interval_Delta[max(1,(SI_CUT-t+2)):SI_CUT]*E_infeByAge[max(1,(t-SI_CUT)):(t-1),:]*rho0;
     E_infeByAge[t,:] = tmp_row_vector_A * ConMatTran[WeekId[t]];
+    TimeVaryInfeByAge[t] = (rep_matrix(tmp_row_vector_A, A))' .* ConMatTran[WeekId[t]]*rho0;
+    
     tmp_vector_A = tmp_vector_A + (E_infeByAge[(t-1),:])';
     suscep[:,t] = fmax_vector(1 - tmp_vector_A ./ Pop, 0);
     E_infeByAge[t,:] .*= (suscep[:,t])';
     E_infeByAge[t,:] .*= exp(log_relsusceptibility_age);
+    TimeVaryInfeByAge[t] .*= rep_matrix((suscep[:,t])', A);
+    TimeVaryInfeByAge[t] .*= rep_matrix(exp(log_relsusceptibility_age), A);
+    
     tmp_matrix = rep_matrix(suscep[:,t], A).*rep_matrix(exp(log_relsusceptibility_age), A) .*ConMatTran[WeekId[t]];
     RtByAge[t,:] = (tmp_matrix * ones_vector_A)'*rho0;
   }
   for (t in (TVaccine+1+Seed):(TOmicron+Seed)){
     tmp_row_vector_A = rev_serial_interval_Delta[max(1,(SI_CUT-t+2)):SI_CUT]*E_infeByAge[max(1,(t-SI_CUT)):(t-1),:]*rho0;
     E_infeByAge[t,:] = tmp_row_vector_A * ConMatTran[WeekId[t]];
+    TimeVaryInfeByAge[t] = (rep_matrix(tmp_row_vector_A, A))' .* ConMatTran[WeekId[t]]*rho0;
+    
     tmp_vector_A = tmp_vector_A + (E_infeByAge[(t-1),:])';
     suscep[:,t] = fmax_vector(1 - tmp_vector_A ./ Pop1, 0);
     E_infeByAge[t,:] .*= (suscep[:,t])';
     E_infeByAge[t,:] .*= exp(log_relsusceptibility_age);
+    TimeVaryInfeByAge[t] .*= rep_matrix((suscep[:,t])', A);
+    TimeVaryInfeByAge[t] .*= rep_matrix(exp(log_relsusceptibility_age), A);
+    
     tmp_matrix = rep_matrix(suscep[:,t], A).*rep_matrix(exp(log_relsusceptibility_age), A) .*ConMatTran[WeekId[t]];
     RtByAge[t,:] = (tmp_matrix * ones_vector_A)'*rho0;
   }
   for (t in (TOmicron+1+Seed):(N2+Seed)){
     tmp_row_vector_A = rev_serial_interval_Omicron[max(1,(SI_CUT-t+2)):SI_CUT]*E_infeByAge[max(1,(t-SI_CUT)):(t-1),:]*rho0;
     E_infeByAge[t,:] = tmp_row_vector_A * ConMatTran[WeekId[t]];
+    TimeVaryInfeByAge[t] = (rep_matrix(tmp_row_vector_A, A))' .* ConMatTran[WeekId[t]]*rho0;
+    
     tmp_vector_A = tmp_vector_A + (E_infeByAge[(t-1),:])';
     suscep[:,t] = fmax_vector(1 - tmp_vector_A ./ Pop1, 0);
     E_infeByAge[t,:] .*= (suscep[:,t])';
     E_infeByAge[t,:] .*= exp(log_relsusceptibility_age);
+    TimeVaryInfeByAge[t] .*= rep_matrix((suscep[:,t])', A);
+    TimeVaryInfeByAge[t] .*= rep_matrix(exp(log_relsusceptibility_age), A);
+    
     tmp_matrix = rep_matrix(suscep[:,t], A).*rep_matrix(exp(log_relsusceptibility_age), A) .*ConMatTran[WeekId[t]];
     RtByAge[t,:] = (tmp_matrix * ones_vector_A)'*rho0;
   }
@@ -173,14 +192,14 @@ model {
   weekly_rho1 ~ normal(0.1, 0.05);
   weekly_effect[1,] ~ normal(1, 0.01);
   weekly_effect[2,] ~ normal(1,weekly_sd*sqrt(1-pow(weekly_rho,2)-pow(weekly_rho1,2)-2*pow(weekly_rho,2)*weekly_rho1/(1-weekly_rho1)));
-  for (a in 1:A){
+  for (a in 1:A) {
     weekly_effect[3:W,a] ~ normal(weekly_effect[2:(W-1),a]*weekly_rho + weekly_effect[1:(W-2),a]*weekly_rho1,
                               weekly_sd *sqrt(1-pow(weekly_rho,2)-pow(weekly_rho1,2)-2*pow(weekly_rho,2)*weekly_rho1/(1-weekly_rho1)));
   }
   phi ~ normal(0,5);
-  phi2 ~ normal(0,2);
+  phi2 ~ normal(0,1);
   phi3 ~ normal(0.8, 0.05);
-  ihr_noise ~ normal(1,0.1);
+  ihr_noise ~ normal(1,0.8);
   icr_noise ~ normal(1,0.1);
   log_relsusceptibility_age_reduced[1] ~ normal(-1.07, 0.22);//citation: Zhang et al Science
   log_relsusceptibility_age_reduced[2] ~ normal(0.38, 0.16);//citation: Zhang et al Science
